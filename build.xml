@@ -1,0 +1,96 @@
+<project name="Site Backup" default="backup" basedir="." xmlns:sf="antlib:com.salesforce">
+
+    <property file="build.properties"/>
+    <property environment="env"/>
+
+    <condition property="sf.username" value=""> <not> <isset property="sf.username"/> </not> </condition>
+    <condition property="sf.password" value=""> <not> <isset property="sf.password"/> </not> </condition>
+    <condition property="sf.sessionId" value=""> <not> <isset property="sf.sessionId"/> </not> </condition>
+
+	<tstamp>
+	  <format property="TODAY_CN" pattern="yyyy-MM-dd HH:mm:ss" locale="cn,CN"/>
+	</tstamp>
+	
+	<condition property="git.message" value="Auto Backup on ${TODAY_CN}"> 
+		<not> 
+			<isset property="git.message"/> 
+		</not> 
+	</condition>
+
+    <taskdef resource="com/salesforce/antlib.xml" uri="antlib:com.salesforce">
+        <classpath><pathelement location="ant-salesforce.jar" /></classpath>
+    </taskdef>
+	
+	<!--Start Set Git Macro-->
+	<macrodef name="git">
+		<attribute name="command" />
+		<attribute name="dir" default="" />
+		<element name="args" optional="true" />
+		<sequential>
+			<exec executable="git" dir="@{dir}">
+				<arg value="@{command}" />
+				<args />
+			</exec>
+		</sequential>
+	</macrodef>
+
+	<macrodef name="git-commit-with-message">
+		<attribute name="message" />
+		<attribute name="dir" default="" />
+		<sequential>
+			<git command="add" dir="@{dir}" >
+				<args>
+					<arg value="." />
+				</args>
+			</git>
+			<git command="commit" dir="@{dir}" >
+				<args>
+					<arg value="-m @{message}" />
+				</args>
+			</git>
+		</sequential>
+	</macrodef>
+		
+	<macrodef name="git-set-server-push">
+		<attribute name="pushurl" />
+		<attribute name="dir" default="" />
+		<sequential>
+			<git command="remote" dir="@{dir}">
+				<args>
+					<arg value="set-url" />
+					<arg value="--push" />
+					<arg value="origin" />
+					<arg value="@{pushurl}" />
+				</args>
+			</git>
+		</sequential>
+	</macrodef>
+
+	<macrodef name="git-push-to-remote">
+		<attribute name="dir" default="" />
+		<attribute name="branchName" />
+		<sequential>
+			<git command="push" dir="@{dir}" >
+				<args>
+					<arg value="origin" />
+					<arg value="@{branchName}" />
+				</args>
+			</git>
+		</sequential>
+	</macrodef>
+	<!--End Set Git Macro-->
+
+    <!-- The file ${basedir}/package.xml lists what is to be retrieved -->
+    <target name="pull-sf-source">
+      <mkdir dir="${project.target}"/>
+      <sf:retrieve username="${sf.username}" password="${sf.password}" sessionId="${sf.sessionId}" serverurl="${sf.serverurl}" maxPoll="${sf.maxPoll}" retrieveTarget="${project.target}" unpackaged="${basedir}/package.xml"/>
+    </target>
+	
+	<target name="commit-to-git-server" description="Commit to Git server">
+		<git-commit-with-message message="${git.message}" dir="${project.path}" />
+		<git-set-server-push pushurl="${git.repository}" dir="${project.path}" />
+		<git-push-to-remote dir="${project.path}" branchName="${git.branch}" />
+	</target>
+
+	<target name="backup" depends="pull-sf-source, commit-to-git-server" />
+</project>
